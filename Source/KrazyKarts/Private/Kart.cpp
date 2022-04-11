@@ -3,7 +3,6 @@
 
 #include "Kart.h"
 
-
 #include "Components/InputComponent.h"
 
 
@@ -40,9 +39,23 @@ void AKart::Tick(float DeltaTime)
 	Acceleration = Force / Mass; // acceleration is the force divided by vehicle's mass, same as (Force = mass * acceleration)
 	// update location of Pawn based on velocity applied, it's multiplied by 100 to convert from meters to cm.
 	Velocity = Velocity + Acceleration * DeltaTime;
-	FVector Translation = Velocity * 100 * DeltaTime;
-	AddActorWorldOffset(Translation);
 
+
+	UpdateLocationFromVelocity(DeltaTime);
+
+}
+
+void AKart::UpdateLocationFromVelocity(float DeltaTime)
+{
+	FVector Translation = Velocity * 100 * DeltaTime;
+
+	FHitResult Hit;
+	AddActorWorldOffset(Translation, true, &Hit);
+
+	if (Hit.IsValidBlockingHit())
+	{
+		Velocity = FVector::ZeroVector;
+	}
 }
 
 // Called to bind functionality to input

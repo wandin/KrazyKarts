@@ -4,7 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
+
 #include "Kart.generated.h"
+
+
 
 UCLASS()
 class KRAZYKARTS_API AKart : public APawn
@@ -26,13 +29,14 @@ public:
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
+
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
-
-
+	
 
 private:
+
+	void UpdateLocationFromVelocity(float DeltaTime);
 
 	// mass of the car (Kg)
 	UPROPERTY(EditAnywhere)
