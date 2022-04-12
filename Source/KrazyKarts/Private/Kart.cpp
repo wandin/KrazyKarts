@@ -21,13 +21,6 @@ void AKart::BeginPlay()
 	
 }
 
-void AKart::MoveForward(float Val)
-{
-	// throttle is the amount of (InputAxis Val)
-	Throttle = Val;
-
-}
-
 // Called every frame
 void AKart::Tick(float DeltaTime)
 {
@@ -36,13 +29,34 @@ void AKart::Tick(float DeltaTime)
 
 	// Force is equal to Actor's direction * by the Force applied to the car when throttle is fully pressed (N) * throttle
 	FVector Force = GetActorForwardVector() * MaxDrivingForce * Throttle;
+
+	Force += GetResistance();
 	Acceleration = Force / Mass; // acceleration is the force divided by vehicle's mass, same as (Force = mass * acceleration)
 	// update location of Pawn based on velocity applied, it's multiplied by 100 to convert from meters to cm.
 	Velocity = Velocity + Acceleration * DeltaTime;
 
 
+	ApplyRotation(DeltaTime);
+
 	UpdateLocationFromVelocity(DeltaTime);
 
+}
+
+FVector AKart::GetResistance()
+{
+
+
+
+	return - Velocity.GetSafeNormal() * Velocity.SizeSquared() * DragCoefficient;
+}
+
+void AKart::ApplyRotation(float DeltaTime)
+{
+	float RotationAngle = MaxDegreesPerSecond * DeltaTime * Steering;
+	FQuat RotationDelta(GetActorUpVector(), FMath::DegreesToRadians(RotationAngle));
+
+	Velocity = RotationDelta.RotateVector(Velocity);
+	AddActorWorldRotation(RotationDelta);
 }
 
 void AKart::UpdateLocationFromVelocity(float DeltaTime)
@@ -64,6 +78,18 @@ void AKart::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
 	PlayerInputComponent->BindAxis("MoveForward", this, &AKart::MoveForward);
+	PlayerInputComponent->BindAxis("MoveRight", this, &AKart::MoveRight);
 
+}
+
+void AKart::MoveForward(float Val)
+{
+	// throttle is the amount of (InputAxis Val)
+	Throttle = Val;
+}
+
+void AKart::MoveRight(float Val)
+{
+	Steering = Val;
 }
 
