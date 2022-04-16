@@ -23,11 +23,18 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
-	/** Handle pressing Forward */
-	void MoveForward(float Val);
 
-	/** Handle pressing right */
-	void MoveRight(float Val);
+	void MoveForward(float Val); /** Handle pressing Forward */
+	void MoveRight(float Val); /** Handle pressing right */
+
+	// Replicates MoveForward to from server to client
+	UFUNCTION(Server, Reliable, WithValidation)
+	void Server_MoveForward(float Val);
+	// Replicates MoveRight to from server to client
+	UFUNCTION(Server, Reliable, WithValidation)
+	void Server_MoveRight(float Val);
+
+	void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const;
 
 public:	
 	// Called every frame
@@ -40,7 +47,8 @@ public:
 
 private:
 
-	FVector GetResistance();
+	FVector GetAirResistance();
+	FVector GetRollinResistance();
 
 	void UpdateLocationFromVelocity(float DeltaTime);
 
@@ -54,15 +62,28 @@ private:
 	UPROPERTY(EditAnywhere)
 	float MaxDrivingForce = 10000;
 
-	// Number of degrees rotate per second when pressing Right (degrees/s)
+	// Minimum radius of the car turning circle at full lock (meters)
 	UPROPERTY(EditAnywhere)
-	float MaxDegreesPerSecond = 90.f;
+	float MinTurningRadius = 10;
 
+	/* Higher value means more drag */
 	UPROPERTY(EditAnywhere)
 	float DragCoefficient = 16;
 
+	/* Higher value means more rolling resistance */
+	UPROPERTY(EditAnywhere)
+	float RollingResistanceCoefficient = 0.015f;
+
 	FVector Acceleration;
 	FVector Velocity;
+			
+
+	UPROPERTY(Replicated)
+	FVector ReplicatedLocation;
+
+	UPROPERTY(Replicated)
+	FRotator ReplicatedRotation;
+
 
 	float Throttle;
 	float Steering;
