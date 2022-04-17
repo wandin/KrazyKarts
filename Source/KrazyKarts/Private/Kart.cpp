@@ -17,6 +17,8 @@ AKart::AKart()
  	// Set this pawn to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
+	bReplicates = true;
+
 }
 
 // Called when the game starts or when spawned
@@ -24,13 +26,19 @@ void AKart::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (HasAuthority())
+	{
+		NetUpdateFrequency = 1;
+	}
 }
 
 void AKart::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(AKart, ReplicatedLocation);
-	DOREPLIFETIME(AKart, ReplicatedRotation);
+
+	DOREPLIFETIME(AKart, ServerState);
+	DOREPLIFETIME(AKart, Throttle);
+	DOREPLIFETIME(AKart, Steering);
 }
 
 FString GetEnumText(ENetRole Role)
@@ -56,6 +64,16 @@ void AKart::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	if (IsLocallyControlled())
+	{
+		FKartMove Move;
+		Move.DeltaTime = DeltaTime;
+		Move.Steering = Steering;
+		Move.Throttle = Throttle;
+		// TODO : Set Time
+
+		Server_SendMove(Move);
+	}
 
 	// Force is equal to Actor's direction * by the Force applied to the car when throttle is fully pressed (N) * throttle
 	FVector Force = GetActorForwardVector() * MaxDrivingForce * Throttle;
@@ -74,17 +92,18 @@ void AKart::Tick(float DeltaTime)
 
 	if (HasAuthority())
 	{
-		ReplicatedLocation = GetActorLocation();
-		ReplicatedRotation = GetActorRotation();
+		ServerState.Transform = GetActorTransform();
+		ServerState.Velocity = Velocity;
+		//TODO: Update last move
 	}
-	else
-	{
-		SetActorLocation(ReplicatedLocation);
-		SetActorRotation(ReplicatedRotation);
-	}
-
 
 	DrawDebugString(GetWorld(), FVector(0,0,100), GetEnumText(GetLocalRole()), this, FColor::White, DeltaTime);
+}
+
+void AKart::OnRep_ServerState()
+{
+	SetActorTransform(ServerState.Transform);
+	Velocity = ServerState.Velocity;
 }
 
 FVector AKart::GetAirResistance()
@@ -138,33 +157,23 @@ void AKart::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 void AKart::MoveForward(float Val)
 {
 	Throttle = Val;
-	Server_MoveForward(Val);
-}
-
-void AKart::Server_MoveForward_Implementation(float Val)
-{
-	// throttle is the amount of (InputAxis Val)
-	Throttle = Val;
-}
-
-bool AKart::Server_MoveForward_Validate(float Val)
-{
-	return FMath::Abs(Val) <= 1;
 }
 
 void AKart::MoveRight(float Val)
 {
 	Steering = Val;
-	Server_MoveRight(Val);
 }
 
-void AKart::Server_MoveRight_Implementation(float Val)
+void AKart::Server_SendMove_Implementation(FKartMove Move)
 {
-	Steering = Val;
+	// throttle is the amount of (InputAxis Val)
+	Throttle = Move.Throttle;
+	Steering = Move.Steering;
+
 }
 
-bool AKart::Server_MoveRight_Validate(float Val)
+bool AKart::Server_SendMove_Validate(FKartMove Move)
 {
-	return FMath::Abs(Val) <= 1;
+	return true; //TODO: Make better validation
 }
 

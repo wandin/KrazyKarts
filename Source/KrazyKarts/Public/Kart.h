@@ -3,10 +3,40 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Pawn.h"
 
+#include "GameFramework/Pawn.h"
 #include "Kart.generated.h"
 
+USTRUCT() struct FKartMove
+{
+	GENERATED_USTRUCT_BODY()
+
+	UPROPERTY()
+	float Throttle;
+
+	UPROPERTY()
+	float Steering;
+
+	UPROPERTY()
+	float DeltaTime;
+
+	UPROPERTY()
+	float Time;
+};
+
+USTRUCT() struct FKartState
+{
+	GENERATED_USTRUCT_BODY()
+
+	UPROPERTY()
+	FTransform Transform;
+
+	UPROPERTY()
+	FVector Velocity;
+
+	UPROPERTY()
+	FKartMove LastMove;
+};
 
 
 UCLASS()
@@ -24,23 +54,11 @@ protected:
 
 public:
 
-	void MoveForward(float Val); /** Handle pressing Forward */
-	void MoveRight(float Val); /** Handle pressing right */
-
-	// Replicates MoveForward to from server to client
-	UFUNCTION(Server, Reliable, WithValidation)
-	void Server_MoveForward(float Val);
-	// Replicates MoveRight to from server to client
-	UFUNCTION(Server, Reliable, WithValidation)
-	void Server_MoveRight(float Val);
-
 	void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const;
 
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
-
-
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	
@@ -74,17 +92,25 @@ private:
 	UPROPERTY(EditAnywhere)
 	float RollingResistanceCoefficient = 0.015f;
 
+	void MoveForward(float Val); /** Handle pressing Forward */
+	void MoveRight(float Val); /** Handle pressing right */
+
+	// Replicates MoveForward to from server to client
+	UFUNCTION(Server, Reliable, WithValidation)
+	void Server_SendMove(FKartMove Move);
+
+	UPROPERTY(ReplicatedUsing = OnRep_ServerState)
+	FKartState ServerState;
+
 	FVector Acceleration;
+
 	FVector Velocity;
-			
+
+	UFUNCTION()
+	void OnRep_ServerState();
 
 	UPROPERTY(Replicated)
-	FVector ReplicatedLocation;
-
-	UPROPERTY(Replicated)
-	FRotator ReplicatedRotation;
-
-
 	float Throttle;
+	UPROPERTY(Replicated)
 	float Steering;
 };
