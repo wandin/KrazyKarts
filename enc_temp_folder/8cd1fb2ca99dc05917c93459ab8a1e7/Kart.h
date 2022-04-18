@@ -67,7 +67,7 @@ public:
 
 private:
 
-	void SimulateMove(const FKartMove& Move);
+	void SimulateMove(FKartMove Move);
 
 	FKartMove CreateMove(float DeltaTime);
 	void ClearAcknowledgeMoves(FKartMove LastMove);

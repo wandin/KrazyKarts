@@ -64,25 +64,21 @@ void AKart::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (GetLocalRole() == ROLE_AutonomousProxy)
+	if (IsLocallyControlled())
 	{
 		FKartMove Move = CreateMove(DeltaTime);
+
+
+		if (!HasAuthority())
+		{
+			UnacknowledgeMoves.Add(Move);
+
+			UE_LOG(LogTemp, Warning, TEXT("Queue length: %d"), UnacknowledgeMoves.Num());
+		}
+
+		Server_SendMove(Move);
+		
 		SimulateMove(Move);
-
-		UnacknowledgeMoves.Add(Move);
-		Server_SendMove(Move);
-	}
-
-	// We are the server and in control of the pawn
-	if (GetLocalRole() == ROLE_Authority && GetRemoteRole() == ROLE_SimulatedProxy)
-	{
-		FKartMove Move = CreateMove(DeltaTime);
-		Server_SendMove(Move);
-	}
-
-	if (GetLocalRole() == ROLE_SimulatedProxy)
-	{
-		SimulateMove(ServerState.LastMove);
 	}
 
 	DrawDebugString(GetWorld(), FVector(0,0,100), GetEnumText(GetLocalRole()), this, FColor::White, DeltaTime);
@@ -94,14 +90,9 @@ void AKart::OnRep_ServerState()
 	Velocity = ServerState.Velocity;
 
 	ClearAcknowledgeMoves(ServerState.LastMove);
-
-	for (const FKartMove& Move : UnacknowledgeMoves)
-	{
-		SimulateMove(Move);
-	}
 }
 
-void AKart::SimulateMove(const FKartMove& Move)
+void AKart::SimulateMove(FKartMove Move)
 {
 
 	// Force is equal to Actor's direction * by the Force applied to the car when throttle is fully pressed (N) * throttle
