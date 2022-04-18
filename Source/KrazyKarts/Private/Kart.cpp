@@ -1,6 +1,4 @@
 // Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "Kart.h"
 
 #include "Components/InputComponent.h"
@@ -8,10 +6,6 @@
 
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
-#include "Net/UnrealNetWork.h"
-
-
-#include "GameFramework/GameStateBase.h"
 
 // Sets default values
 AKart::AKart()
@@ -20,6 +14,9 @@ AKart::AKart()
 	PrimaryActorTick.bCanEverTick = true;
 
 	bReplicates = true;
+
+	MovementComponent = CreateDefaultSubobject<UKartMovementComponent>(TEXT("Movement Component"));
+	MovementReplicator = CreateDefaultSubobject<UKartReplicatorComponent>(TEXT("Movement Replicator Component"));
 
 }
 
@@ -32,13 +29,6 @@ void AKart::BeginPlay()
 	{
 		NetUpdateFrequency = 1;
 	}
-}
-
-void AKart::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(AKart, ServerState);
 }
 
 FString GetEnumText(ENetRole Role)
@@ -55,7 +45,6 @@ FString GetEnumText(ENetRole Role)
 		return "Authority";
 	default:
 		return "ERROR";
-
 	}
 }
 
@@ -64,128 +53,7 @@ void AKart::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (GetLocalRole() == ROLE_AutonomousProxy)
-	{
-		FKartMove Move = CreateMove(DeltaTime);
-		SimulateMove(Move);
-
-		UnacknowledgeMoves.Add(Move);
-		Server_SendMove(Move);
-	}
-
-	// We are the server and in control of the pawn
-	if (GetLocalRole() == ROLE_Authority && GetRemoteRole() == ROLE_SimulatedProxy)
-	{
-		FKartMove Move = CreateMove(DeltaTime);
-		Server_SendMove(Move);
-	}
-
-	if (GetLocalRole() == ROLE_SimulatedProxy)
-	{
-		SimulateMove(ServerState.LastMove);
-	}
-
 	DrawDebugString(GetWorld(), FVector(0,0,100), GetEnumText(GetLocalRole()), this, FColor::White, DeltaTime);
-}
-
-void AKart::OnRep_ServerState()
-{
-	SetActorTransform(ServerState.Transform);
-	Velocity = ServerState.Velocity;
-
-	ClearAcknowledgeMoves(ServerState.LastMove);
-
-	for (const FKartMove& Move : UnacknowledgeMoves)
-	{
-		SimulateMove(Move);
-	}
-}
-
-void AKart::SimulateMove(const FKartMove& Move)
-{
-
-	// Force is equal to Actor's direction * by the Force applied to the car when throttle is fully pressed (N) * throttle
-	FVector Force = GetActorForwardVector() * MaxDrivingForce * Move.Throttle;
-
-	Force += GetAirResistance();
-	Force += GetRollinResistance();
-
-	// acceleration is the force divided by vehicle's mass, same as (Force = mass * acceleration)
-	Acceleration = Force / Mass;
-
-	// update location of Pawn based on velocity applied, it's multiplied by 100 to convert from meters to cm.
-	Velocity = Velocity + Acceleration * Move.DeltaTime;
-
-	ApplyRotation(Move.DeltaTime, Move.Steering);
-
-	UpdateLocationFromVelocity(Move.DeltaTime);
-
-}
-
-FKartMove AKart::CreateMove(float DeltaTime)
-{
-	FKartMove Move;
-	Move.DeltaTime = DeltaTime;
-	Move.Steering = SteeringInput;
-	Move.Throttle = ThrottleInput;
-	Move.Time = GetWorld()->GetGameState()->GetServerWorldTimeSeconds(); // time that will be helpful to measure which move was created first
-	// instead of using GetWorld()->GetTimeSeconds(), the approach used is more robust thich tries to guess the lag and give the current server time
-
-	return Move;
-}
-
-void AKart::ClearAcknowledgeMoves(FKartMove LastMove)
-{
-	// iterating throught the array to find old 'moves' to clear
-	TArray<FKartMove> NewMoves;
-
-	for (const FKartMove& Move : UnacknowledgeMoves)
-	{
-		if (Move.Time > LastMove.Time)
-		{
-			NewMoves.Add(Move);
-		}
-	}
-
-	UnacknowledgeMoves = NewMoves;
-}
-
-FVector AKart::GetAirResistance()
-{
-	// returns negative because it's against the car's velocity direction
-	return - Velocity.GetSafeNormal() * Velocity.SizeSquared() * DragCoefficient;
-}
-
-FVector AKart::GetRollinResistance()
-{
-	float AccelerationDueToGravity = -GetWorld()->GetGravityZ() / 100;
-	float NormalForce = Mass * AccelerationDueToGravity;
-
-	// returns negative because it's against the car's force direction
-	return -Velocity.GetSafeNormal() * RollingResistanceCoefficient * NormalForce;
-}
-
-void AKart::ApplyRotation(float DeltaTime, float Steering)
-{
-	float DeltaLocation = FVector::DotProduct(GetActorForwardVector(), Velocity) * DeltaTime;
-	float RotationAngle = DeltaLocation / MinTurningRadius * Steering;
-	FQuat RotationDelta(GetActorUpVector(), RotationAngle);
-
-	Velocity = RotationDelta.RotateVector(Velocity);
-	AddActorWorldRotation(RotationDelta);
-}
-
-void AKart::UpdateLocationFromVelocity(float DeltaTime)
-{
-	FVector Translation = Velocity * 100 * DeltaTime;
-
-	FHitResult Hit;
-	AddActorWorldOffset(Translation, true, &Hit);
-
-	if (Hit.IsValidBlockingHit())
-	{
-		Velocity = FVector::ZeroVector;
-	}
 }
 
 // Called to bind functionality to input
@@ -200,25 +68,15 @@ void AKart::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 
 void AKart::MoveForward(float Val)
 {
-	ThrottleInput = Val;
+	if (MovementComponent == nullptr) return;
+
+	MovementComponent->SetThrottle(Val);
 }
 
 void AKart::MoveRight(float Val)
 {
-	SteeringInput = Val;
-}
+	if (MovementComponent == nullptr) return;
 
-void AKart::Server_SendMove_Implementation(FKartMove Move)
-{
-	SimulateMove(Move);
-
-	ServerState.LastMove = Move;
-	ServerState.Transform = GetActorTransform();
-	ServerState.Velocity = Velocity;
-}
-
-bool AKart::Server_SendMove_Validate(FKartMove Move)
-{
-	return true; //TODO: Make better validation
+	MovementComponent->SetSteering(Val);
 }
 
