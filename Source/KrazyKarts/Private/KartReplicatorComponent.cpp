@@ -45,7 +45,7 @@ void UKartReplicatorComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 
 	if (GetOwnerRole() == ROLE_SimulatedProxy)
 	{
-		MovementComponent->SimulateMove(ServerState.LastMove);
+		ClientTick(DeltaTime);
 	}
 }
 
@@ -56,6 +56,28 @@ void UKartReplicatorComponent::UpdateServerState(const FKartMove& Move)
 	ServerState.Velocity = MovementComponent->GetVelocity();
 }
 
+void UKartReplicatorComponent::ClientTick(float DeltaTime)
+{
+	ClientTimeSinceUpdate += DeltaTime;
+
+	if (ClientTimeBetweenLastUpdates < KINDA_SMALL_NUMBER) return;
+
+	FVector TargetLocation = ServerState.Transform.GetLocation();
+	float LerpRatio = ClientTimeSinceUpdate / ClientTimeBetweenLastUpdates;
+	FVector StartLocation = ClientStartTransform.GetLocation();
+
+	FVector NewLocation = FMath::LerpStable(StartLocation, TargetLocation, LerpRatio);
+
+	GetOwner()->SetActorLocation(NewLocation);
+
+	FQuat TargetRotation = ServerState.Transform.GetRotation();
+	FQuat StartRotation = ClientStartTransform.GetRotation();
+
+	FQuat NewRotation = FQuat::Slerp(StartRotation, TargetRotation, LerpRatio);
+
+	GetOwner()->SetActorRotation(NewRotation);
+}
+
 void UKartReplicatorComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -64,6 +86,21 @@ void UKartReplicatorComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProper
 }
 
 void UKartReplicatorComponent::OnRep_ServerState()
+{
+	switch (GetOwnerRole())
+	{
+		case ROLE_AutonomousProxy:
+			AutonomousProxy_OnRep_ServerState();
+			break;
+		case ROLE_SimulatedProxy:
+			SimulatedProxy_OnRep_ServerState();
+			break;
+	default:
+		break;
+	}
+}
+
+void UKartReplicatorComponent::AutonomousProxy_OnRep_ServerState()
 {
 	if (MovementComponent == nullptr) return;
 
@@ -76,6 +113,14 @@ void UKartReplicatorComponent::OnRep_ServerState()
 	{
 		MovementComponent->SimulateMove(Move);
 	}
+}
+
+void UKartReplicatorComponent::SimulatedProxy_OnRep_ServerState()
+{
+	ClientTimeBetweenLastUpdates = ClientTimeSinceUpdate;
+	ClientTimeSinceUpdate = 0;
+
+	ClientStartTransform = GetOwner()->GetActorTransform();
 }
 
 void UKartReplicatorComponent::ClearAcknowledgeMoves(FKartMove LastMove)

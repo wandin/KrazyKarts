@@ -14,6 +14,7 @@ AKart::AKart()
 	PrimaryActorTick.bCanEverTick = true;
 
 	bReplicates = true;
+	SetReplicateMovement(false);
 
 	MovementComponent = CreateDefaultSubobject<UKartMovementComponent>(TEXT("Movement Component"));
 	MovementReplicator = CreateDefaultSubobject<UKartReplicatorComponent>(TEXT("Movement Replicator Component"));
