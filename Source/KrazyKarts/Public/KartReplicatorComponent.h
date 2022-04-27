@@ -68,6 +68,7 @@ private:
 	float ClientTimeSinceUpdate;
 	float ClientTimeBetweenLastUpdates;
 	FTransform ClientStartTransform;
+	FVector ClientStartVelocity;
 
 	UPROPERTY()
 	UKartMovementComponent* MovementComponent;
