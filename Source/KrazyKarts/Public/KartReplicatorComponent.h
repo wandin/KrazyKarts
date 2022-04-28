@@ -91,6 +91,17 @@ private:
 	FTransform ClientStartTransform;
 	FVector ClientStartVelocity;
 
+	float ClientSimulatedTime;
+
 	UPROPERTY()
 	UKartMovementComponent* MovementComponent;
+
+	UPROPERTY()
+	USceneComponent* MeshOffsetRoot;
+
+	UFUNCTION(BlueprintCallable)
+		void SetMeshOffsetRoot(USceneComponent* Root)
+	{
+		MeshOffsetRoot = Root;
+	}
 };

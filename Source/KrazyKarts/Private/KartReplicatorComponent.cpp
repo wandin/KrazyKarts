@@ -4,6 +4,8 @@
 #include "KartReplicatorComponent.h"
 #include "Net/UnrealNetwork.h"
 
+#include "GameFramework/Actor.h"
+
 // Sets default values for this component's properties
 UKartReplicatorComponent::UKartReplicatorComponent()
 {
@@ -121,15 +123,25 @@ void UKartReplicatorComponent::AutonomousProxy_OnRep_ServerState()
 
 void UKartReplicatorComponent::SimulatedProxy_OnRep_ServerState()
 {
+	if (MovementComponent == nullptr) return;
+
 	ClientTimeBetweenLastUpdates = ClientTimeSinceUpdate;
 	ClientTimeSinceUpdate = 0;
 
-	ClientStartTransform = GetOwner()->GetActorTransform();
+	if (MeshOffsetRoot != nullptr)
+	{
+		ClientStartTransform.SetLocation(MeshOffsetRoot->GetComponentLocation());
+		ClientStartTransform.SetRotation(MeshOffsetRoot->GetComponentQuat());
+	}
+
+	ClientStartVelocity = MovementComponent->GetVelocity();
+
+	GetOwner()->SetActorTransform(ServerState.Transform);
 }
 
 void UKartReplicatorComponent::ClearAcknowledgeMoves(FKartMove LastMove)
 {
-	// iterating throught the array to find old 'moves' to clear
+	// iterating through the array to find old 'moves' to clear
 	TArray<FKartMove> NewMoves;
 
 	for (const FKartMove& Move : UnacknowledgeMoves)
@@ -145,7 +157,11 @@ void UKartReplicatorComponent::ClearAcknowledgeMoves(FKartMove LastMove)
 void UKartReplicatorComponent::InterpolateLocation(const FHermiteCubicSpline& Spline, float LerpRatio)
 {
 	FVector NewLocation = Spline.InterpolateLocation(LerpRatio);
-	GetOwner()->SetActorLocation(NewLocation);
+
+	if (MeshOffsetRoot != nullptr)
+	{
+		MeshOffsetRoot->SetWorldLocation(NewLocation);
+	}
 }
 
 void UKartReplicatorComponent::InterpolateVelocity(const FHermiteCubicSpline& Spline, float LerpRatio)
@@ -162,7 +178,10 @@ void UKartReplicatorComponent::InterpolateRotation(float LerpRatio)
 
 	FQuat NewRotation = FQuat::Slerp(StartRotation, TargetRotation, LerpRatio);
 
-	GetOwner()->SetActorRotation(NewRotation);
+	if (MeshOffsetRoot != nullptr)
+	{
+		MeshOffsetRoot->SetWorldRotation(NewRotation);
+	}
 }
 
 float UKartReplicatorComponent::VelocityToDerivative()
@@ -174,6 +193,7 @@ void UKartReplicatorComponent::Server_SendMove_Implementation(FKartMove Move)
 {
 	if (MovementComponent == nullptr) return;
 
+	ClientSimulatedTime += Move.DeltaTime;
 	MovementComponent->SimulateMove(Move);
 
 	UpdateServerState(Move);
@@ -183,5 +203,20 @@ bool UKartReplicatorComponent::Server_SendMove_Validate(FKartMove Move)
 {
 	return true; 
 	
-	//TODO: Make better validation
+	float ProposedTime = ClientSimulatedTime + Move.DeltaTime;
+	bool ClientNotRunningAhead = ProposedTime < GetWorld()->TimeSeconds;
+
+	if (!ClientNotRunningAhead)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Client is running too fast."))
+		return false;
+	
+
+	if (!Move.IsValid())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Received invalid move."))
+			return false;
+	}
+
+	return true;
 }

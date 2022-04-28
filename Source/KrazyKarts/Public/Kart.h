@@ -29,16 +29,15 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-	
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	UKartMovementComponent* MovementComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	UKartReplicatorComponent* MovementReplicator;
+
 private:
 
 	void MoveForward(float Val); /** Handle pressing Forward */
 	void MoveRight(float Val); /** Handle pressing right */
 
-
-	UPROPERTY(EditAnywhere)
-	UKartMovementComponent* MovementComponent;
-
-	UPROPERTY(EditAnywhere)
-	UKartReplicatorComponent* MovementReplicator;
 };
